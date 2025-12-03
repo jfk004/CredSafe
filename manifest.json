@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "CredGuard - Smart Login Protection",
+  "version": "0.1.0",
+  "description": "Monitors credential popups and gives a safety rating for the current URL using ML and OSINT-backed risk scoring.",
+  "permissions": [
+    "tabs",
+    "storage",
+    "scripting",
+    "activeTab",
+    "notifications"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "CredGuard"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["contentScript.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
