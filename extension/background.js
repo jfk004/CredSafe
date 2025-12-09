@@ -5,10 +5,12 @@ const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 // Store traffic data per tab
 const trafficData = new Map();
 
-// Expose for DevTools
-globalThis.trafficData = trafficData; 
+// Expose for DevTools debugging
+globalThis.trafficData = trafficData;
 
-// Google tracking helpers
+/* =========================
+   GOOGLE TRACKING HELPERS
+   ========================= */
 
 function isTrackingParam(key) {
   if (key.startsWith("utm_")) return true;
@@ -80,15 +82,21 @@ function handleGoogleRequest(url) {
   });
 }
 
+/* =========================
+   OPENAI HELPER
+   ========================= */
 
-// Get OpenAI API key from storage
 async function getApiKey() {
   const result = await chrome.storage.local.get(["openai_api_key"]);
   return result.openai_api_key || null;
 }
 
-// Collect traffic data for a tab
+/* =========================
+   TRAFFIC COLLECTION
+   ========================= */
+
 function addTrafficEvent(tabId, event) {
+  // Initialize storage for this tab
   if (!trafficData.has(tabId)) {
     trafficData.set(tabId, {
       url: null,
@@ -96,15 +104,16 @@ function addTrafficEvent(tabId, event) {
       startTime: Date.now()
     });
   }
-  
+
   const data = trafficData.get(tabId);
+
   const fullEvent = {
     ...event,
     timestamp: Date.now()
   };
-  
+
   data.events.push(fullEvent);
-  
+
   // Log the event with full details
   console.log(`[WebTrafficMonitor] 📤 OUTGOING REQUEST [Tab ${tabId}]:`, {
     kind: event.kind,
@@ -113,15 +122,17 @@ function addTrafficEvent(tabId, event) {
     type: event.type || "N/A",
     time: new Date(fullEvent.timestamp).toLocaleTimeString()
   });
-  
+
   // Keep only last 200 events per tab to avoid memory issues
   if (data.events.length > 200) {
     data.events = data.events.slice(-200);
   }
 }
 
+/* =========================
+   OPENAI ANALYSIS
+   ========================= */
 
-// Analyze traffic with OpenAI
 async function analyzeTrafficWithOpenAI(tabId) {
   const data = trafficData.get(tabId);
   if (!data || data.events.length === 0) {
@@ -147,22 +158,24 @@ async function analyzeTrafficWithOpenAI(tabId) {
       start: new Date(data.startTime).toISOString(),
       end: new Date().toISOString()
     },
-    events: data.events.map(e => ({
+    events: data.events.map((e) => ({
       type: e.kind,
       url: e.url || "N/A",
       method: e.method || "N/A",
-      time: new Date(e.time).toISOString()
+      time: new Date(e.timestamp || Date.now()).toISOString()
     }))
   };
 
-  // Count event types
-  data.events.forEach(e => {
+  // Count event types and domains
+  data.events.forEach((e) => {
     summary.eventTypes[e.kind] = (summary.eventTypes[e.kind] || 0) + 1;
     if (e.url) {
       try {
         const urlObj = new URL(e.url);
         summary.domains.add(urlObj.hostname);
-      } catch (e) {}
+      } catch (_) {
+        // ignore URL parse errors
+      }
     }
   });
 
@@ -214,17 +227,21 @@ Format your response as JSON with keys: summary, privacyConcerns, securityConcer
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(`OpenAI API error: ${response.status} - ${errorData.error?.message || response.statusText}`);
+      throw new Error(
+        `OpenAI API error: ${response.status} - ${
+          errorData.error?.message || response.statusText
+        }`
+      );
     }
 
     const result = await response.json();
     const content = result.choices[0]?.message?.content || "";
-    
+
     // Try to parse JSON response
     let analysis;
     try {
       analysis = JSON.parse(content);
-    } catch (e) {
+    } catch (_) {
       // If not JSON, treat as plain text
       analysis = {
         summary: content,
@@ -252,18 +269,20 @@ Format your response as JSON with keys: summary, privacyConcerns, securityConcer
   }
 }
 
-// Handle messages from content scripts
+/* =========================
+   MESSAGE HANDLER
+   ========================= */
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const tabId = sender.tab?.id;
-  
+
   if (message.type === "refresh_prompt") {
-    // Force update of traffic data
     sendResponse({ success: true });
     return false;
   }
 
   if (message.type === "page_event") {
-    // Collect traffic data
+    // Collect traffic data from content script
     if (tabId !== undefined && tabId !== null) {
       const url = sender.tab?.url;
       if (url && !trafficData.has(tabId)) {
@@ -273,11 +292,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           startTime: Date.now()
         });
       }
-      
+
       if (trafficData.has(tabId)) {
         trafficData.get(tabId).url = url || trafficData.get(tabId).url;
         addTrafficEvent(tabId, message.payload);
-        console.log(`Traffic event collected for tab ${tabId}:`, message.payload.kind);
       }
     } else {
       console.warn("Page event received but tab ID is undefined");
@@ -287,23 +305,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "analyze_traffic") {
-    // Analyze traffic with OpenAI
     (async () => {
       const result = await analyzeTrafficWithOpenAI(tabId);
       sendResponse(result);
     })();
-    return true; // Keep channel open for async
+    return true; // async
   }
 
   if (message.type === "get_traffic_data") {
-    // Get current traffic data - need to get tab ID from active tab
     (async () => {
       let targetTabId = tabId;
-      
-      // If no tab ID from sender, get active tab
+
       if (targetTabId === undefined || targetTabId === null) {
         try {
-          const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+          const tabs = await chrome.tabs.query({
+            active: true,
+            currentWindow: true
+          });
           if (tabs.length > 0) {
             targetTabId = tabs[0].id;
           }
@@ -311,28 +329,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           console.error("Error getting active tab:", e);
         }
       }
-      
-      const data = targetTabId !== undefined && targetTabId !== null 
-        ? trafficData.get(targetTabId) 
-        : null;
-      
+
+      const data =
+        targetTabId !== undefined && targetTabId !== null
+          ? trafficData.get(targetTabId)
+          : null;
+
       sendResponse({
         success: true,
         data: data || { events: [], url: null, startTime: Date.now() }
       });
     })();
-    return true; // Keep channel open for async
+    return true;
   }
 
   if (message.type === "clear_traffic_data") {
-    // Clear traffic data for tab
     (async () => {
       let targetTabId = tabId;
-      
-      // If no tab ID from sender, get active tab
+
       if (targetTabId === undefined || targetTabId === null) {
         try {
-          const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+          const tabs = await chrome.tabs.query({
+            active: true,
+            currentWindow: true
+          });
           if (tabs.length > 0) {
             targetTabId = tabs[0].id;
           }
@@ -340,30 +360,33 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           console.error("Error getting active tab:", e);
         }
       }
-      
+
       if (targetTabId !== undefined && targetTabId !== null) {
         trafficData.delete(targetTabId);
       }
       sendResponse({ success: true });
     })();
-    return true; // Keep channel open for async
+    return true;
   }
 
   if (message.type === "test_webrequest") {
-    // Test if webRequest API is available
     const hasWebRequest = typeof chrome.webRequest !== "undefined";
-    sendResponse({ 
-      status: hasWebRequest ? "webRequest API available" : "webRequest API not available",
-      hasWebRequest 
+    sendResponse({
+      status: hasWebRequest
+        ? "webRequest API available"
+        : "webRequest API not available",
+      hasWebRequest
     });
     return false;
   }
 });
 
-// Initialize traffic data when tab is updated
+/* =========================
+   TAB LIFECYCLE HANDLERS
+   ========================= */
+
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status === "complete" && tab.url) {
-    // Initialize traffic data for this tab if it doesn't exist
     if (!trafficData.has(tabId)) {
       trafficData.set(tabId, {
         url: tab.url,
@@ -371,56 +394,67 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
         startTime: Date.now()
       });
     } else {
-      // Update URL if it changed
       trafficData.get(tabId).url = tab.url;
     }
-    
-    // Try to inject a simple observer script as fallback (CSP-safe method)
-    if (tab.url && !tab.url.startsWith("chrome://") && !tab.url.startsWith("edge://") && !tab.url.startsWith("chrome-extension://")) {
+
+    // Inject lightweight PerformanceObserver in the page
+    if (
+      tab.url &&
+      !tab.url.startsWith("chrome://") &&
+      !tab.url.startsWith("edge://") &&
+      !tab.url.startsWith("chrome-extension://")
+    ) {
       try {
-        chrome.scripting.executeScript({
-          target: { tabId: tabId },
-          func: () => {
-            // Simple observer that doesn't violate CSP
-            const observer = new PerformanceObserver((list) => {
-              for (const entry of list.getEntries()) {
-                if (entry.entryType === "resource") {
-                  window.postMessage({
-                    source: "webtrafficmonitor",
-                    kind: "resource",
-                    url: entry.name,
-                    time: entry.startTime
-                  }, "*");
+        chrome.scripting
+          .executeScript({
+            target: { tabId },
+            func: () => {
+              const observer = new PerformanceObserver((list) => {
+                for (const entry of list.getEntries()) {
+                  if (entry.entryType === "resource") {
+                    window.postMessage(
+                      {
+                        source: "webtrafficmonitor",
+                        kind: "resource",
+                        url: entry.name,
+                        time: entry.startTime
+                      },
+                      "*"
+                    );
+                  }
                 }
+              });
+              try {
+                observer.observe({ entryTypes: ["resource"] });
+              } catch (_) {
+                // PerformanceObserver might not be available
               }
-            });
-            try {
-              observer.observe({ entryTypes: ["resource"] });
-            } catch (e) {
-              // PerformanceObserver might not be available
-            }
-          },
-          world: "MAIN"
-        }).catch(() => {
-          // Ignore errors - webRequest should handle it
-        });
-      } catch (e) {
+            },
+            world: "MAIN"
+          })
+          .catch(() => {
+            // Ignore errors - webRequest will still capture traffic
+          });
+      } catch (_) {
         // Ignore injection errors
       }
     }
   }
 });
 
-// Clean up traffic data when tab is closed
 chrome.tabs.onRemoved.addListener((tabId) => {
   trafficData.delete(tabId);
 });
 
-// Use webRequest API to capture network traffic (bypasses CSP)
-// Note: We only observe, never block requests
+/* =========================
+   WEBREQUEST LISTENERS
+   ========================= */
+
 function setupWebRequestListeners() {
   if (typeof chrome.webRequest === "undefined") {
-    console.error("[WebTrafficMonitor] webRequest API not available. Check manifest permissions.");
+    console.error(
+      "[WebTrafficMonitor] webRequest API not available. Check manifest permissions."
+    );
     return false;
   }
 
@@ -429,27 +463,25 @@ function setupWebRequestListeners() {
       (details) => {
         try {
           const tabId = details.tabId;
-          if (tabId === -1) return; // Ignore non-tab requests (extensions, etc.)
-          
-          // Skip extension URLs and chrome:// URLs
-          if (details.url.startsWith("chrome-extension://") || 
-              details.url.startsWith("chrome://") ||
-              details.url.startsWith("edge://") ||
-              details.url.startsWith("moz-extension://")) {
+          if (tabId === -1) return; // Ignore non-tab requests
+
+          // Skip extension / chrome URLs
+          if (
+            details.url.startsWith("chrome-extension://") ||
+            details.url.startsWith("chrome://") ||
+            details.url.startsWith("edge://") ||
+            details.url.startsWith("moz-extension://")
+          ) {
             return;
           }
-          
-          // Detects requests that originate from Google Search
+
+          // Detect requests that originate from Google Search
           const initiator = details.initiator || details.documentUrl || "";
-
-          if(initiator.startsWith("https://www.google. ")){
-
-            // Triggered by a click and loads from Google
-            handleGoogleRequest(details.Url);
+          if (initiator.startsWith("https://www.google.")) {
+            // Triggered by a click/load from Google
+            handleGoogleRequest(details.url);
           }
 
-          
-          
           // Initialize if needed
           if (!trafficData.has(tabId)) {
             trafficData.set(tabId, {
@@ -458,7 +490,7 @@ function setupWebRequestListeners() {
               startTime: Date.now()
             });
           }
-          
+
           // Add the request event
           addTrafficEvent(tabId, {
             kind: "webrequest",
@@ -467,46 +499,42 @@ function setupWebRequestListeners() {
             time: details.timeStamp,
             type: details.type || "other"
           });
-          
-          // Update tab URL if available (async, don't wait)
-          chrome.tabs.get(tabId).then((tab) => {
-            if (tab && tab.url && trafficData.has(tabId)) {
-              trafficData.get(tabId).url = tab.url;
-            }
-          }).catch(() => {
-            // Ignore errors
-          });
+
         } catch (error) {
           console.error("[WebTrafficMonitor] Error in onBeforeRequest:", error);
         }
       },
       { urls: ["<all_urls>"] },
-      [] // Empty array means we're just observing, not blocking
+      [] // observation only
     );
 
-    // Also capture response info
     chrome.webRequest.onCompleted.addListener(
       (details) => {
         try {
           const tabId = details.tabId;
           if (tabId === -1 || !trafficData.has(tabId)) return;
-          
-          // Update the event with response info
+
           const data = trafficData.get(tabId);
-          // Find matching event by URL (check last 10 events for performance)
-          for (let i = data.events.length - 1; i >= Math.max(0, data.events.length - 10); i--) {
+          // Find matching event by URL (last 10 events for perf)
+          for (
+            let i = data.events.length - 1;
+            i >= Math.max(0, data.events.length - 10);
+            i--
+          ) {
             if (data.events[i].url === details.url) {
               data.events[i].statusCode = details.statusCode;
               data.events[i].statusLine = details.statusLine;
-              
-              // Log the response
-              console.log(`[WebTrafficMonitor] 📥 INCOMING RESPONSE [Tab ${tabId}]:`, {
-                url: details.url,
-                statusCode: details.statusCode,
-                statusLine: details.statusLine,
-                method: data.events[i].method || "N/A",
-                time: new Date().toLocaleTimeString()
-              });
+
+              console.log(
+                `[WebTrafficMonitor] 📥 INCOMING RESPONSE [Tab ${tabId}]:`,
+                {
+                  url: details.url,
+                  statusCode: details.statusCode,
+                  statusLine: details.statusLine,
+                  method: data.events[i].method || "N/A",
+                  time: new Date().toLocaleTimeString()
+                }
+              );
               break;
             }
           }
@@ -515,9 +543,9 @@ function setupWebRequestListeners() {
         }
       },
       { urls: ["<all_urls>"] },
-      [] // Don't request responseHeaders to avoid blocking
+      []
     );
-    
+
     console.log("[WebTrafficMonitor] webRequest listeners registered successfully");
     return true;
   } catch (error) {
