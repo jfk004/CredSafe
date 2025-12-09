@@ -1,139 +1,99 @@
-# CredSafe
-AI-Powered Credential Protection & Malicious URL Detection for the Web
-CredSafe is a security-focused Chrome extension that protects users from entering their credentials on suspicious or malicious websites. Using a combination of machine learning, real-time URL analysis, and OSINT-backed intelligence, CredSafe detects phishing attempts, cloned login pages, and high-risk sites—before the user enters sensitive information.
-This project uses the Malicious URLs Dataset from Kaggle to train a multi-class classifier that identifies benign, phishing, malware, and defacement URLs. The extension then analyzes login pages in real time and displays a clear risk rating or blocks unsafe interactions.
+# WebTrafficMonitor
+AI-Powered Website Data Usage Monitor
+web Traffic Monitor is a chrome extension that watches how a site sends data out and feeds a summarized view into the Gemini API. The popup then shows a human-readable explanation of what the website appears to be doing with your data.
  
 # Features
 
-**Real-Time Credential Form Detection**
+**Monitors outgoing data**
 
-•	Automatically detects password fields, login forms, and credential popups.
+•	Tracks outgoing HTTPs requests via webRequest.
 
-•	Instantly evaluates the webpage whenever a login UI appears.
+•	Uses **Chrome webRequest** API for low-level network visibility.
 
-**Machine Learning–Based URL Classification**
-
-•	Trained on 650k+ labeled URLs from the Kaggle malicious URL dataset.
-
-•	Predicts whether a site is:
-
--	Benign
-
--	Phishing
-
--	Malware
-
--	Defacement
-
-**Risk Scoring Engine**
-
-Each URL receives a 0–100 risk score based on:
-
-•	ML classification probabilities
-
-•	Structural URL analysis (length, subdomains, special chars)
-
-•	Suspicious patterns (IP-based URLs, brand keywords, etc.)
-
-•	Fallback heuristic scoring if offline
-
-•	Future-additions: WHOIS age, SSL issuer checks, OSINT signals
-
-**Brand & Impersonation Detection**
-
-•	Detects domains impersonating known services (Google, Microsoft, banks, etc.).
-
-•	Flags typosquatting or look-alike domains commonly used in phishing.
-
-**Visual Safety Indicators**
-
-•	Extension displays a badge color:
-
--	Green — Safe
--	Yellow — Suspicious
--	Red — Dangerous
-  
-•	Popup window shows classification, risk score, and an AI summary.
-
-**Automatic Alerts & Blocking**
-
-•	If a page is classified as High Risk, CredSafe issues:
-
--	A system alert
-  
--	A visible warning
-  
--	Optional blocking of credential entry
+• Observes WebSocket opened and sends a message
  
-# How It Works
-**1. Browser Extension**
-   
-•	Listens for credential fields and login UI elements.
+• Logs form submissions (field names, with sensitive values redacted)
 
-•	Sends URL + minimal page context to the backend for scoring.
 
-•	Shows risk scores and notifications in real time.
+**AI privacy summary**
 
-**2. Machine Learning Backend**
-   
-•	Character-level TF-IDF + Logistic Regression model.
+•	Sends a compact, sanitized event log to Gemini.
 
-•	Trained using Kaggle’s malicious URL dataset.
+•	Explains how the site appears to use your data.
 
-•	Returns:
+•	Highlights likely tracking/ analytics / advertising endpoints.
 
-  - Predicted label
+•	Estimates a rough privacy risk level (Low, Medium , High).
 
- - Class probabilities
+**Site View**
 
-  - Computed risk score
+•	Summaries are grouped by origin.
 
-- Human-readable explanation
+•	Popup shows the current tab's summary on demand.
+
+# Requirements
+- Chrome/ Chromium-based browser with Manifest V3 support
+
+# Installation
+- Clone / download the repo:
+   https://github.com/jfk004/WebTrafficMonitor.git
+
+- Load the extension in Chrome:
+   - Go to chrome://extensions/
+   - Enable Developer mode
+   - Click Load unpacked
+   - Choose the folder with the web traffic monitor.
+
+ - You should now see Web Traffic Monitor in your extension bar.
+
+# Usage
+- Navigate to any website you'r curious about
+- Interact with the page as usual(login, click around, search etc).
+- Click the Web Traffic Monitor icon in the toolbar:
   
-**3. Combined Risk Engine**
-   
-Final risk = ML prediction + heuristics + impersonation detection.
+   - The popup detects the current origin
+     
+   - It a generates a summary from the background.
+     
+   - You'll see a short report explaining:
+     
+      - What type of data the site seems to send out.
+        
+      - Where it might be sending that data
+        
+      - Rough privacy risks and key points in bullet form
+    
+- If there's not enough data yet the popup will tell you.
 
-This hybrid approach prevents zero-day false negatives and improves detection reliability.
- 
-# Dataset Used
+# Privacy and Data Handling
+Web traffic Monitor is designed to be privacy-respectful:
 
-**Malicious URLs Dataset**
+ - Sanitization:
+    - Form field names are logged and values are:
+      
+       - Redacted when field names suggest sensitive info for instance passwords, ssn, card information etc.
+      
+       - Shortened preview length
+         
+    - WebSocket and request bodies are summarized and not fully recorded.
+      
+ - The extension does not read or send cookies, auth headers or full bodies.
 
-Kaggle: https://www.kaggle.com/datasets/sid321axn/malicious-urls-dataset
+ - Raw event lists stay in memory in the background script.
 
-•	~651,000 URLs
+ - Summaries are cached locally in chrome.storage.locl.
 
-•	Categories:
-
--	benign
-
--	phishing
-
--	malware
-
--	defacement
-
-This dataset powers the ML model used in CredSafe.
- 
-# Installation Guide
-
- **Prerequisites**
-
-•	Google Chrome (or any Chromium-based browser)
-
-•	Python 3.9+
-
-•	Kaggle dataset downloaded (CSV file)
+You are encouraged to review and adjust redaction rules before using this in sensitive environments.
 
 
 # Disclaimer
-CredGuard significantly enhances protection against phishing and malicious login pages, but no security tool is perfect. Users should still practice safe browsing habits and verify unknown websites manually.
+Web Traffic Monitor is a research/ helper tool, not a production-grade security product.
 
-# Contributing
-Pull requests, feature suggestions, and improvements are welcome!
-
-# License
-
-
+  - It may miss some flows
+    
+  - AI summaries may misclassify endpoints or risks.
+    
+  - It is not substitute for professional security analysis, legal review, or compliance auditing.
+    
+Use it as an informative lens, not as the final word on any site's privacy posture.
 
