@@ -5,6 +5,79 @@ const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 // Store traffic data per tab
 const trafficData = new Map();
 
+// Google tracking helpers
+
+function isTrackingParam(key) {
+  if (key.startsWith("utm_")) return true;
+
+  const known = [
+    "gclid",     // Google Ads click ID
+    "fbclid",    // Facebook click ID
+    "igshid",    // Instagram share ID
+    "mc_cid",    // Mailchimp campaign
+    "mc_eid",
+    "yclid",     // Yandex
+    "vero_id",
+    "msclkid"    // Microsoft Ads
+  ];
+
+  return known.includes(key.toLowerCase());
+}
+
+function extractTrackingInfo(rawUrl) {
+  let url;
+  try {
+    url = new URL(rawUrl);
+  } catch (e) {
+    return null; // invalid URL
+  }
+
+  const tracking = {};
+  url.searchParams.forEach((value, key) => {
+    if (isTrackingParam(key)) {
+      tracking[key] = value;
+    }
+  });
+
+  // Build a "clean" URL without tracking params
+  const cleanUrl = new URL(url.origin + url.pathname);
+  url.searchParams.forEach((value, key) => {
+    if (!isTrackingParam(key)) {
+      cleanUrl.searchParams.append(key, value);
+    }
+  });
+
+  return {
+    originalUrl: rawUrl,
+    cleanUrl: cleanUrl.toString(),
+    trackingParams: tracking,
+    destinationOrigin: cleanUrl.origin
+  };
+}
+
+function handleGoogleRequest(url) {
+  const info = extractTrackingInfo(url);
+  if (!info) return;
+
+  // Only log if we actually found tracking params
+  if (Object.keys(info.trackingParams).length === 0) return;
+
+  chrome.storage.local.get({ googleTrackingLog: [] }, (data) => {
+    const log = data.googleTrackingLog || [];
+
+    log.push({
+      time: Date.now(),
+      ...info
+    });
+
+    const MAX = 200;
+    while (log.length > MAX) log.shift();
+
+    chrome.storage.local.set({ googleTrackingLog: log });
+  });
+}
+
+
 // Get OpenAI API key from storage
 async function getApiKey() {
   const result = await chrome.storage.local.get(["openai_api_key"]);
@@ -344,6 +417,17 @@ function setupWebRequestListeners() {
               details.url.startsWith("moz-extension://")) {
             return;
           }
+          
+          // Detects requests that originate from Google Search
+          const initiator = details.initiator || details.documentUrl || "";
+
+          if(initiator.startsWith("https://www.google. ")){
+
+            // Triggered by a click and loads from Google
+            handleGoogleRequest(details.Url);
+          }
+
+          
           
           // Initialize if needed
           if (!trafficData.has(tabId)) {
