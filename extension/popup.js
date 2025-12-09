@@ -4,6 +4,12 @@ let currentTabId = null;
 
 // === Helpers ===
 
+function escapeHtml(text) {
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML.replace(/\n/g, "<br>");
+}
+
 function formatDuration(ms) {
   if (!ms || ms < 0) return "0s";
   const totalSeconds = Math.floor(ms / 1000);
@@ -574,12 +580,6 @@ function addChatMessage(role, content) {
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
-function escapeHtml(text) {
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML.replace(/\n/g, "<br>");
-}
-
 function setupChatInterface() {
   const sendBtn = document.getElementById("send-chat-btn");
   const input = document.getElementById("chat-input");
@@ -772,23 +772,242 @@ Please structure your response with clear sections and actionable insights.`;
 }
 
 function createPromptTab(prompt) {
+  // Extract stats from the prompt text for display
+  const eventMatch = prompt.match(/Total Events Captured[^:]*: (\d+)/);
+  const domainMatch = prompt.match(/Top Domains Contacted \((\d+) total\)/);
+  const durationMatch = prompt.match(/Monitoring Duration[^:]*: (\d+) minutes/);
+  
+  const eventCount = eventMatch ? eventMatch[1] : '0';
+  const domainCount = domainMatch ? domainMatch[1] : '0';
+  const duration = durationMatch ? durationMatch[1] + 'm' : '0m';
+  
+  // Create the complete HTML with prompt
   const promptHtml = `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
   <title>AI Analysis Prompt - Web Traffic Monitor</title>
-  <!-- styles omitted here for brevity in this explanation -->
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #1e1e1e;
+      color: #f5f5f5;
+      line-height: 1.6;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 30px;
+      padding-bottom: 20px;
+      border-bottom: 2px solid #4a9eff;
+    }
+    h1 {
+      color: #4a9eff;
+      margin: 0 0 10px 0;
+    }
+    .stats {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      margin: 20px 0;
+      flex-wrap: wrap;
+    }
+    .stat-box {
+      background: #2a2a2a;
+      padding: 15px 25px;
+      border-radius: 8px;
+      text-align: center;
+      min-width: 120px;
+    }
+    .stat-value {
+      font-size: 24px;
+      font-weight: bold;
+      color: #4a9eff;
+      margin: 5px 0;
+    }
+    .stat-label {
+      font-size: 12px;
+      color: #aaa;
+      text-transform: uppercase;
+    }
+    .controls {
+      display: flex;
+      gap: 10px;
+      margin: 20px 0;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    button {
+      padding: 10px 20px;
+      background: #4a9eff;
+      border: none;
+      border-radius: 6px;
+      color: white;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background 0.2s;
+    }
+    button:hover {
+      background: #3a8eef;
+    }
+    button.secondary {
+      background: #555;
+    }
+    button.secondary:hover {
+      background: #444;
+    }
+    .alert {
+      background: #27ae60;
+      color: white;
+      padding: 10px;
+      border-radius: 6px;
+      margin: 10px 0;
+      text-align: center;
+      display: none;
+    }
+    .prompt-container {
+      background: #2a2a2a;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+      border: 1px solid #444;
+    }
+    .prompt-box {
+      background: #1a1a1a;
+      border: 1px solid #444;
+      border-radius: 6px;
+      padding: 15px;
+      white-space: pre-wrap;
+      font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      max-height: 500px;
+      overflow-y: auto;
+      color: #f5f5f5;
+      margin: 0;
+    }
+    .instructions {
+      background: #2a2a2a;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+      border: 1px solid #444;
+    }
+    .instructions h3 {
+      margin-top: 0;
+      color: #6bb6ff;
+    }
+  </style>
 </head>
 <body>
-  <!-- body content omitted for brevity -->
+  <div class="container">
+    <header>
+      <h1>🔍 Web Traffic Analysis Prompt</h1>
+      <p>Ready for AI analysis - Copy and paste into any AI assistant</p>
+    </header>
+    
+    <div class="stats">
+      <div class="stat-box">
+        <div class="stat-value">${eventCount}</div>
+        <div class="stat-label">Total Events</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value">${domainCount}</div>
+        <div class="stat-label">Domains</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value">${duration}</div>
+        <div class="stat-label">Duration</div>
+      </div>
+    </div>
+    
+    <div class="controls">
+      <button id="copy-btn">📋 Copy Prompt</button>
+      <button id="open-chatgpt" class="secondary">ChatGPT</button>
+      <button id="open-claude" class="secondary">Claude</button>
+      <button id="open-gemini" class="secondary">Gemini</button>
+    </div>
+    
+    <div id="alert" class="alert">✅ Prompt copied to clipboard!</div>
+    
+    <div class="prompt-container">
+      <h3>AI Analysis Prompt:</h3>
+      <pre class="prompt-box" id="prompt-content">${escapeHtml(prompt)}</pre>
+    </div>
+    
+    <div class="instructions">
+      <h3>How to use:</h3>
+      <ol>
+        <li>Click "Copy Prompt" button above</li>
+        <li>Open your preferred AI assistant (ChatGPT, Claude, Gemini, etc.)</li>
+        <li>Paste the prompt and ask for analysis</li>
+        <li>The AI will analyze the web traffic and provide insights on privacy, security, and data collection</li>
+      </ol>
+    </div>
+  </div>
+  
+  <script>
+    // Get the prompt content directly from the pre element
+    const promptElement = document.getElementById('prompt-content');
+    const promptContent = promptElement ? promptElement.textContent : '';
+    
+    // Copy button functionality
+    document.getElementById('copy-btn').addEventListener('click', () => {
+      if (!promptContent) {
+        alert('No prompt content available');
+        return;
+      }
+      
+      navigator.clipboard.writeText(promptContent).then(() => {
+        const alert = document.getElementById('alert');
+        alert.style.display = 'block';
+        setTimeout(() => {
+          alert.style.display = 'none';
+        }, 3000);
+      }).catch(err => {
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = promptContent;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        
+        const alert = document.getElementById('alert');
+        alert.style.display = 'block';
+        setTimeout(() => {
+          alert.style.display = 'none';
+        }, 3000);
+      });
+    });
+    
+    // Open AI services
+    document.getElementById('open-chatgpt').addEventListener('click', () => {
+      window.open('https://chat.openai.com/', '_blank');
+    });
+    
+    document.getElementById('open-claude').addEventListener('click', () => {
+      window.open('https://claude.ai/', '_blank');
+    });
+    
+    document.getElementById('open-gemini').addEventListener('click', () => {
+      window.open('https://gemini.google.com/', '_blank');
+    });
+  </script>
 </body>
 </html>`;
-
-  // Create a new tab with the HTML
-  chrome.tabs.create({
-    url: "data:text/html;charset=utf-8," + encodeURIComponent(promptHtml)
-  });
+  
+  // Create blob and open in new tab
+  const blob = new Blob([promptHtml], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  
+  chrome.tabs.create({ url: url });
 }
 
 function showError(message) {
