@@ -19,7 +19,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "CredGuard"
+    "default_title": "Web Traffic Monitor"
   },
   "content_scripts": [
     {
